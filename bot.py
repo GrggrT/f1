@@ -46,6 +46,7 @@ async def post_init(app: Application) -> None:
         BotCommand("predict", "\u041f\u0440\u043e\u0433\u043d\u043e\u0437\u044b"),
         BotCommand("survivor", "Survivor Pool"),
         BotCommand("chips", "\u0427\u0438\u043f\u044b"),
+        BotCommand("transfer", "\u0422\u0440\u0430\u043d\u0441\u0444\u0435\u0440"),
         BotCommand("results", "\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b"),
         BotCommand("prices", "\u0426\u0435\u043d\u044b \u043f\u0438\u043b\u043e\u0442\u043e\u0432"),
         BotCommand("predstandings", "\u0422\u0430\u0431\u043b\u0438\u0446\u0430 \u043f\u0440\u043e\u0433\u043d\u043e\u0437\u043e\u0432"),

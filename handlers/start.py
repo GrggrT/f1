@@ -41,7 +41,25 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # Handle deep links
     if context.args:
         arg = context.args[0]
-        if arg in ("pickteam", "myteam", "predict", "survivor", "chips"):
+        if arg == "pickteam":
+            from handlers.team import pickteam_command
+            await pickteam_command(update, context)
+            return
+        elif arg == "myteam":
+            from handlers.team import myteam_command
+            await myteam_command(update, context)
+            return
+        elif arg == "predict":
+            from handlers.predict import predict_start
+            await predict_start(update, context)
+            return
+        elif arg == "survivor":
+            from handlers.survivor import survivor_dm
+            await survivor_dm(update, context)
+            return
+        elif arg == "chips":
+            from handlers.chips import chips_command
+            await chips_command(update, context)
             return
 
     if update.effective_chat.type != "private":

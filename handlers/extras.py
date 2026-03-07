@@ -1,17 +1,13 @@
 from __future__ import annotations
 
-import csv
-import io
-import json
 import logging
 from collections import defaultdict
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 from data.database import Database
-from services.budget import get_all_drivers, get_all_constructors, get_driver_name, get_driver_price, get_constructor_name, get_constructor_price
-from utils.keyboards import ALL_MENU_TEXTS, MENU_PREDICTIONS, MENU_PRICES, MENU_STANDINGS
+from services.budget import get_driver_name
 
 logger = logging.getLogger(__name__)
 
@@ -119,38 +115,6 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
 
-# ── /prices ──
-
-async def prices_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    drivers = get_all_drivers()
-    constructors = get_all_constructors()
-
-    lines = ["\U0001f4b0 *Driver Prices*\n"]
-    lines.append("```")
-    lines.append(f"{'Driver':<18} {'Price':>6} {'Team':<12}")
-    lines.append("-" * 38)
-    for d in sorted(drivers, key=lambda x: -x.price):
-        name = d.name
-        if len(name) > 18:
-            name = name[:17] + "."
-        team = d.team.replace("_", " ").title()
-        if len(team) > 12:
-            team = team[:11] + "."
-        lines.append(f"{name:<18} ${d.price:>4.1f}M {team:<12}")
-    lines.append("```")
-    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
-
-    lines2 = ["\U0001f3d7 *Constructor Prices*\n"]
-    lines2.append("```")
-    lines2.append(f"{'Constructor':<18} {'Price':>6}")
-    lines2.append("-" * 26)
-    for c in sorted(constructors, key=lambda x: -x.price):
-        lines2.append(f"{c.name:<18} ${c.price:>4.1f}M")
-    lines2.append("```")
-    lines2.append(f"\n\U0001f4b0 Total budget: $100M")
-    await update.message.reply_text("\n".join(lines2), parse_mode="Markdown")
-
-
 # ── /chart (text-based standings progression) ──
 
 async def chart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -235,6 +199,9 @@ async def group_quick_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             InlineKeyboardButton("\U0001f4c8 Chart", callback_data="grp_chart"),
             InlineKeyboardButton("\U0001f3af Pred.Table", callback_data="grp_predstandings"),
         ],
+        [
+            InlineKeyboardButton("\U0001f3af Survivor", callback_data="grp_survivor"),
+        ],
     ])
     await update.message.reply_text(
         "\U0001f3ce *F1 Fantasy \u2014 Quick Menu*",
@@ -286,6 +253,15 @@ async def group_inline_callback(update: Update, context: ContextTypes.DEFAULT_TY
             'effective_user': update.effective_user,
         })()
         await predstandings_command(update_proxy, context)
+
+    elif query.data == "grp_survivor":
+        from handlers.survivor import survivor_standings_command
+        update_proxy = type('obj', (object,), {
+            'message': query.message,
+            'effective_chat': update.effective_chat,
+            'effective_user': update.effective_user,
+        })()
+        await survivor_standings_command(update_proxy, context)
 
 
 def setup_extras_handlers(app: Application) -> None:

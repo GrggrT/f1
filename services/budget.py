@@ -4,10 +4,11 @@ import json
 import os
 import threading
 
+from config import settings
 from data.models import Driver, Constructor
 
 PRICES_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "initial_prices.json")
-TOTAL_BUDGET = 100.0
+TOTAL_BUDGET = settings.TOTAL_BUDGET
 MIN_PRICE = 4.0
 
 _prices_lock = threading.Lock()

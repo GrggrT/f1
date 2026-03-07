@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from config import settings
 from data.database import Database
 
 ALL_CHIPS = ["WILDCARD", "TRIPLE_BOOST", "NO_NEGATIVE"]
-FREE_TRANSFERS_PER_RACE = 2
-EXTRA_TRANSFER_PENALTY = -10
+FREE_TRANSFERS_PER_RACE = settings.FREE_TRANSFERS_PER_RACE
+EXTRA_TRANSFER_PENALTY = -settings.EXTRA_TRANSFER_PENALTY
 
 
 class TransferService:

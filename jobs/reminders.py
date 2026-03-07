@@ -173,6 +173,18 @@ def schedule_race_weekend(context_or_queue, race: Race) -> None:
         )
         job_count += 1
 
+    # 10. Wednesday 10:00 UTC — midweek content (skipped if next race < 5 days away)
+    wednesday = race_dt + timedelta(days=3)
+    wednesday = wednesday.replace(hour=10, minute=0, second=0)
+    if wednesday > now:
+        jq.run_once(
+            _midweek_content,
+            when=(wednesday - now).total_seconds(),
+            data={"race_round": race.round},
+            name=f"{prefix}_wed",
+        )
+        job_count += 1
+
     logger.info("Scheduled %d jobs for Round %d (%s)", job_count, race.round, race.name)
 
 
@@ -383,3 +395,27 @@ async def _monday_summary(context: CallbackContext) -> None:
     from jobs.weekly_content import post_race_summary
     race_round = context.job.data["race_round"]
     await post_race_summary(context, race_round)
+
+
+async def _midweek_content(context: CallbackContext) -> None:
+    """Post midweek content on Wednesday, skipped during back-to-back weeks."""
+    from jobs.weekly_content import post_midweek_content
+    race_round = context.job.data["race_round"]
+    db: Database = context.bot_data["db"]
+    await db.ensure_connected()
+
+    # Skip if the next race is less than 5 days after this race
+    current_race = await db.get_race(race_round)
+    next_race = await db.get_next_race()
+    if current_race and next_race:
+        current_dt = datetime.fromisoformat(current_race.race_datetime)
+        next_dt = datetime.fromisoformat(next_race.race_datetime)
+        if (next_dt - current_dt).days < 5:
+            logger.info(
+                "Skipping midweek content for round %d — next race in %d days",
+                race_round,
+                (next_dt - current_dt).days,
+            )
+            return
+
+    await post_midweek_content(context)

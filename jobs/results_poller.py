@@ -16,8 +16,8 @@ from utils.formatters import format_standings_table
 
 logger = logging.getLogger(__name__)
 
-MAX_POLL_ATTEMPTS = 40  # ~3.5 hours at 5 min intervals
-POLL_INTERVAL = 300  # 5 minutes
+MAX_POLL_ATTEMPTS = settings.MAX_POLL_ATTEMPTS  # ~3.5 hours at 5 min intervals
+POLL_INTERVAL = settings.POLL_INTERVAL  # 5 minutes
 
 
 # ── Phase 1: Fast results (OpenF1, race_datetime + 35 min) ──

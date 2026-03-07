@@ -28,6 +28,7 @@ from services.budget import (
     get_driver_price,
     validate_team,
 )
+from services.transfers import TransferService
 from utils.keyboards import (
     ALL_MENU_TEXTS,
     MENU_TEAM,
@@ -40,6 +41,7 @@ from utils.keyboards import (
 logger = logging.getLogger(__name__)
 
 SELECT_DRIVERS, SELECT_CONSTRUCTOR, SELECT_TURBO, CONFIRM = range(4)
+TRANSFER_SELECT_OUT, TRANSFER_SELECT_IN, TRANSFER_CONFIRM = range(4, 7)
 
 OTHER_MENU_TEXTS = [t for t in ALL_MENU_TEXTS if t != MENU_TEAM]
 
@@ -445,6 +447,254 @@ async def _menu_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return ConversationHandler.END
 
 
+# ── /transfer ConversationHandler ──
+
+
+async def transfer_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Entry point for /transfer — only works in private chat."""
+    if update.effective_chat.type != "private":
+        await update.message.reply_text(
+            "Используй /transfer в личных сообщениях с ботом."
+        )
+        return ConversationHandler.END
+
+    db = _get_db(context)
+    race = await db.get_next_race()
+    if race is None:
+        await update.message.reply_text(
+            "⚠️ Нет запланированных гонок!"
+        )
+        return ConversationHandler.END
+
+    # Check qualifying deadline
+    deadline = datetime.fromisoformat(race.qualifying_datetime)
+    if datetime.now(timezone.utc).replace(tzinfo=None) >= deadline:
+        await update.message.reply_text(
+            "⚠️ Дедлайн квалификации прошёл — трансферы закрыты!"
+        )
+        return ConversationHandler.END
+
+    race_round = race.round
+    context.user_data["transfer_round"] = race_round
+
+    # Get user's current team for this round
+    team = await db.get_team(update.effective_user.id, race_round)
+    if team is None:
+        # Try latest team
+        team = await db.get_latest_team(update.effective_user.id)
+
+    if team is None:
+        await update.message.reply_text(
+            "У тебя ещё нет команды. Сначала используй /pickteam"
+        )
+        return ConversationHandler.END
+
+    context.user_data["transfer_team"] = team
+
+    # Show current drivers as inline keyboard
+    buttons = []
+    for driver_id in team.drivers:
+        name = get_driver_name(driver_id)
+        price = get_driver_price(driver_id)
+        buttons.append([
+            InlineKeyboardButton(
+                f"{name} (${price:.0f}M)",
+                callback_data=f"tout_{driver_id}",
+            )
+        ])
+    buttons.append([InlineKeyboardButton("❌ Отмена", callback_data="tcancel")])
+
+    keyboard = InlineKeyboardMarkup(buttons)
+    await update.message.reply_text(
+        "🔄 *Трансфер*\n\nВыбери пилота, которого хочешь заменить:",
+        reply_markup=keyboard,
+        parse_mode="Markdown",
+    )
+    return TRANSFER_SELECT_OUT
+
+
+async def transfer_select_out(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Callback handler for selecting the driver to drop."""
+    query = update.callback_query
+    await query.answer()
+
+    driver_out = query.data.replace("tout_", "")
+    context.user_data["transfer_driver_out"] = driver_out
+
+    team = context.user_data["transfer_team"]
+
+    # Show available replacement drivers (all drivers NOT in current team)
+    all_drivers = get_all_drivers()
+    current_ids = set(team.drivers)
+
+    # Calculate budget available: current team cost minus driver_out + constructor
+    team_cost = calculate_team_cost(team.drivers, team.constructor)
+    driver_out_price = get_driver_price(driver_out)
+    # Max affordable = TOTAL_BUDGET - (team_cost - driver_out_price)
+    max_affordable = TOTAL_BUDGET - (team_cost - driver_out_price)
+
+    buttons = []
+    for d in all_drivers:
+        if d.id not in current_ids:
+            affordable = "✅" if d.price <= max_affordable else "🚫"
+            buttons.append([
+                InlineKeyboardButton(
+                    f"{affordable} {d.name} (${d.price:.0f}M)",
+                    callback_data=f"tin_{d.id}",
+                )
+            ])
+    buttons.append([InlineKeyboardButton("❌ Отмена", callback_data="tcancel")])
+
+    keyboard = InlineKeyboardMarkup(buttons)
+    await query.edit_message_text(
+        f"🔄 *Трансфер*\n\n"
+        f"Убираем: {get_driver_name(driver_out)} (${driver_out_price:.0f}M)\n\n"
+        f"Выбери замену (бюджет на пилота: ${max_affordable:.1f}M):",
+        reply_markup=keyboard,
+        parse_mode="Markdown",
+    )
+    return TRANSFER_SELECT_IN
+
+
+async def transfer_select_in(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Callback handler for selecting the new driver."""
+    query = update.callback_query
+    await query.answer()
+
+    driver_in = query.data.replace("tin_", "")
+    driver_out = context.user_data["transfer_driver_out"]
+    team = context.user_data["transfer_team"]
+
+    # Validate budget
+    team_cost = calculate_team_cost(team.drivers, team.constructor)
+    driver_out_price = get_driver_price(driver_out)
+    driver_in_price = get_driver_price(driver_in)
+    new_cost = team_cost - driver_out_price + driver_in_price
+
+    if new_cost > TOTAL_BUDGET:
+        await query.answer(
+            f"Недостаточно бюджета! Нужно ${new_cost:.1f}M, доступно ${TOTAL_BUDGET:.0f}M",
+            show_alert=True,
+        )
+        return TRANSFER_SELECT_IN
+
+    context.user_data["transfer_driver_in"] = driver_in
+
+    # Check penalty info
+    db = _get_db(context)
+    race_round = context.user_data["transfer_round"]
+    ts = TransferService(db)
+    allowed, free_left, reason = await ts.can_transfer(
+        update.effective_user.id, race_round
+    )
+
+    penalty_text = ""
+    if free_left > 0:
+        penalty_text = f"✅ Бесплатный трансфер (осталось: {free_left - 1})"
+    else:
+        penalty_text = f"⚠️ {reason}"
+
+    buttons = [
+        [InlineKeyboardButton("✅ Подтвердить", callback_data="tconf_yes")],
+        [InlineKeyboardButton("❌ Отмена", callback_data="tcancel")],
+    ]
+    keyboard = InlineKeyboardMarkup(buttons)
+
+    await query.edit_message_text(
+        f"🔄 *Подтверждение трансфера*\n\n"
+        f"❌ Убираем: {get_driver_name(driver_out)} (${driver_out_price:.0f}M)\n"
+        f"✅ Берём: {get_driver_name(driver_in)} (${driver_in_price:.0f}M)\n\n"
+        f"💰 Новая стоимость команды: ${new_cost:.1f}M\n"
+        f"{penalty_text}",
+        reply_markup=keyboard,
+        parse_mode="Markdown",
+    )
+    return TRANSFER_CONFIRM
+
+
+async def transfer_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Callback handler for confirming the transfer."""
+    query = update.callback_query
+    await query.answer()
+
+    driver_out = context.user_data["transfer_driver_out"]
+    driver_in = context.user_data["transfer_driver_in"]
+    team = context.user_data["transfer_team"]
+    race_round = context.user_data["transfer_round"]
+
+    db = _get_db(context)
+    ts = TransferService(db)
+
+    # Execute the transfer
+    success, penalty = await ts.execute_transfer(
+        update.effective_user.id, race_round, driver_out, driver_in
+    )
+
+    if not success:
+        await query.edit_message_text(
+            "⚠️ Трансфер не удался — дедлайн прошёл."
+        )
+        return ConversationHandler.END
+
+    # Update the team in DB: replace driver_out with driver_in
+    new_drivers = [d if d != driver_out else driver_in for d in team.drivers]
+
+    # If turbo_driver was the one dropped, reset to first driver
+    turbo = team.turbo_driver
+    if turbo == driver_out:
+        turbo = new_drivers[0]
+
+    new_cost = calculate_team_cost(new_drivers, team.constructor)
+    updated_team = UserTeam(
+        user_id=update.effective_user.id,
+        username=team.username,
+        race_round=race_round,
+        drivers=new_drivers,
+        constructor=team.constructor,
+        turbo_driver=turbo,
+        budget_remaining=TOTAL_BUDGET - new_cost,
+    )
+
+    await db.save_team(update.effective_user.id, race_round, updated_team)
+
+    penalty_msg = ""
+    if penalty > 0:
+        penalty_msg = f"\n⚠️ Штраф: -{penalty} очков"
+
+    await query.edit_message_text(
+        f"✅ *Трансфер выполнен!*\n\n"
+        f"❌ {get_driver_name(driver_out)} → ✅ {get_driver_name(driver_in)}"
+        f"{penalty_msg}\n\n"
+        f"💰 Остаток бюджета: ${TOTAL_BUDGET - new_cost:.1f}M",
+        parse_mode="Markdown",
+    )
+
+    # Notify group
+    if settings.GROUP_CHAT_ID:
+        username = update.effective_user.username
+        display = f"@{username}" if username else update.effective_user.full_name
+        try:
+            await context.bot.send_message(
+                chat_id=settings.GROUP_CHAT_ID,
+                text=f"🔄 {display} сделал трансфер: "
+                     f"{get_driver_name(driver_out)} → {get_driver_name(driver_in)}",
+            )
+        except Exception:
+            logger.warning("Could not send group notification for transfer")
+
+    return ConversationHandler.END
+
+
+async def transfer_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancel the transfer conversation."""
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text("🔄 Трансфер отменён.")
+    elif update.message:
+        await update.message.reply_text("🔄 Трансфер отменён.")
+    return ConversationHandler.END
+
+
 def setup_team_handlers(app: Application) -> None:
     conv_handler = ConversationHandler(
         entry_points=[
@@ -475,3 +725,18 @@ def setup_team_handlers(app: Application) -> None:
     app.add_handler(conv_handler, group=1)
     app.add_handler(CommandHandler("pickteam", pickteam_group), group=0)
     app.add_handler(CommandHandler("myteam", myteam_command))
+
+    transfer_conv = ConversationHandler(
+        entry_points=[CommandHandler("transfer", transfer_command)],
+        states={
+            TRANSFER_SELECT_OUT: [CallbackQueryHandler(transfer_select_out, pattern=r"^tout_")],
+            TRANSFER_SELECT_IN: [CallbackQueryHandler(transfer_select_in, pattern=r"^tin_")],
+            TRANSFER_CONFIRM: [CallbackQueryHandler(transfer_confirm, pattern=r"^tconf_")],
+        },
+        fallbacks=[
+            CommandHandler("cancel", transfer_cancel),
+            CallbackQueryHandler(transfer_cancel, pattern=r"^tcancel"),
+        ],
+        per_message=False,
+    )
+    app.add_handler(transfer_conv)

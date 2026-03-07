@@ -51,8 +51,8 @@ async def survivor_dm(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text("Нет запланированных гонок.")
         return
 
-    # Deadline = race start
-    deadline = datetime.fromisoformat(race.race_datetime)
+    # Deadline = qualifying start
+    deadline = datetime.fromisoformat(race.qualifying_datetime)
     if datetime.now(timezone.utc).replace(tzinfo=None) > deadline:
         await update.message.reply_text(
             "\u26a0\ufe0f Дедлайн survivor pick прошёл!"
@@ -187,8 +187,8 @@ async def survivor_confirm_callback(update: Update, context: ContextTypes.DEFAUL
                 chat_id=settings.GROUP_CHAT_ID,
                 text=f"\U0001f3af {display} сделал survivor pick!",
             )
-        except Exception:
-            logger.warning("Could not send group survivor notification")
+        except Exception as e:
+            logger.warning("Could not send group survivor notification: %s", e)
 
 
 async def survivor_standings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
