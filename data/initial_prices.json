@@ -1,0 +1,39 @@
+{
+  "drivers": [
+    {"id": "verstappen", "name": "Max Verstappen", "team": "red_bull", "price": 30.0},
+    {"id": "norris", "name": "Lando Norris", "team": "mclaren", "price": 30.0},
+    {"id": "leclerc", "name": "Charles Leclerc", "team": "ferrari", "price": 26.0},
+    {"id": "piastri", "name": "Oscar Piastri", "team": "mclaren", "price": 24.0},
+    {"id": "hamilton", "name": "Lewis Hamilton", "team": "ferrari", "price": 22.0},
+    {"id": "russell", "name": "George Russell", "team": "mercedes", "price": 18.0},
+    {"id": "antonelli", "name": "Kimi Antonelli", "team": "mercedes", "price": 14.0},
+    {"id": "sainz", "name": "Carlos Sainz", "team": "williams", "price": 14.0},
+    {"id": "alonso", "name": "Fernando Alonso", "team": "aston_martin", "price": 12.0},
+    {"id": "albon", "name": "Alexander Albon", "team": "williams", "price": 10.0},
+    {"id": "gasly", "name": "Pierre Gasly", "team": "alpine", "price": 10.0},
+    {"id": "lawson", "name": "Liam Lawson", "team": "racing_bulls", "price": 9.0},
+    {"id": "hadjar", "name": "Isack Hadjar", "team": "red_bull", "price": 8.0},
+    {"id": "stroll", "name": "Lance Stroll", "team": "aston_martin", "price": 8.0},
+    {"id": "ocon", "name": "Esteban Ocon", "team": "haas", "price": 8.0},
+    {"id": "hulkenberg", "name": "Nico Hulkenberg", "team": "audi", "price": 8.0},
+    {"id": "perez", "name": "Sergio Perez", "team": "cadillac", "price": 7.0},
+    {"id": "bortoleto", "name": "Gabriel Bortoleto", "team": "audi", "price": 6.5},
+    {"id": "bearman", "name": "Oliver Bearman", "team": "haas", "price": 6.5},
+    {"id": "bottas", "name": "Valtteri Bottas", "team": "cadillac", "price": 6.0},
+    {"id": "colapinto", "name": "Franco Colapinto", "team": "alpine", "price": 6.0},
+    {"id": "lindblad", "name": "Arvid Lindblad", "team": "racing_bulls", "price": 5.0}
+  ],
+  "constructors": [
+    {"id": "mclaren", "name": "McLaren", "price": 32.0},
+    {"id": "red_bull", "name": "Red Bull Racing", "price": 30.0},
+    {"id": "ferrari", "name": "Ferrari", "price": 28.0},
+    {"id": "mercedes", "name": "Mercedes", "price": 22.0},
+    {"id": "aston_martin", "name": "Aston Martin", "price": 14.0},
+    {"id": "williams", "name": "Williams", "price": 12.0},
+    {"id": "alpine", "name": "Alpine", "price": 9.0},
+    {"id": "racing_bulls", "name": "Racing Bulls", "price": 9.0},
+    {"id": "audi", "name": "Audi", "price": 8.0},
+    {"id": "haas", "name": "Haas", "price": 8.0},
+    {"id": "cadillac", "name": "Cadillac", "price": 6.0}
+  ]
+}
