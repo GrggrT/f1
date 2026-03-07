@@ -1,10 +1,10 @@
-import logging
 from datetime import datetime, timezone
 
 from telegram import BotCommand, Update
 from telegram.ext import Application
 
 from config import settings
+from utils.logging_config import get_logger, setup_logging
 from data.api_client import F1DataService
 from data.database import Database
 from data.f1_calendar import load_calendar
@@ -20,11 +20,8 @@ from handlers.survivor import setup_survivor_handlers
 from handlers.team import setup_team_handlers
 from jobs.reminders import schedule_race_weekend
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
+setup_logging()
+logger = get_logger(__name__)
 
 
 async def post_init(app: Application) -> None:
@@ -32,6 +29,7 @@ async def post_init(app: Application) -> None:
     db = Database(settings.DB_PATH)
     await db.connect()
     app.bot_data["db"] = db
+    app.bot_data["start_time"] = datetime.now(timezone.utc)
     logger.info("Database initialized at %s", settings.DB_PATH)
 
     # F1 Data Service

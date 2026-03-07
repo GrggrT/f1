@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
+import shutil
 from datetime import datetime, timedelta, timezone
 
 from telegram.ext import CallbackContext
@@ -61,6 +64,16 @@ def schedule_race_weekend(context_or_queue, race: Race) -> None:
             when=(friday - now).total_seconds(),
             data={"race_round": race.round},
             name=f"{prefix}_fri",
+        )
+
+    # 2b. Pre-race database backup (4h before qualifying)
+    backup_time = quali_dt - timedelta(hours=4)
+    if backup_time > now:
+        jq.run_once(
+            _pre_race_backup,
+            when=(backup_time - now).total_seconds(),
+            data={"race_round": race.round},
+            name=f"{prefix}_backup",
         )
 
     # 3. 24h before qualifying
@@ -164,6 +177,45 @@ def schedule_race_weekend(context_or_queue, race: Race) -> None:
 
 
 # ── Job callbacks ──
+
+async def _pre_race_backup(context: CallbackContext) -> None:
+    """Create a database backup before the race weekend."""
+    race_round = context.job.data["race_round"]
+    db_path = settings.DB_PATH
+
+    if not os.path.exists(db_path):
+        logger.error("DB file not found at %s — skipping backup", db_path)
+        return
+
+    backup_dir = "backups"
+    os.makedirs(backup_dir, exist_ok=True)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    dest = os.path.join(backup_dir, f"fantasy_r{race_round}_{timestamp}.db")
+
+    try:
+        await asyncio.to_thread(shutil.copy2, db_path, dest)
+        logger.info("Database backup created: %s", dest)
+    except Exception:
+        logger.exception("Failed to create database backup for round %d", race_round)
+        return
+
+    # Clean up old backups — keep only the last 10
+    try:
+        backups = sorted(
+            [
+                os.path.join(backup_dir, f)
+                for f in os.listdir(backup_dir)
+                if f.endswith(".db")
+            ],
+            key=os.path.getmtime,
+        )
+        for old in backups[:-10]:
+            os.remove(old)
+            logger.info("Removed old backup: %s", old)
+    except Exception:
+        logger.exception("Failed to clean up old backups")
+
 
 async def _thursday_preview(context: CallbackContext) -> None:
     race_round = context.job.data["race_round"]

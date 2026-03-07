@@ -388,6 +388,73 @@ async def admin_cancelrace(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             pass
 
 
+@admin_only
+async def admin_health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show health status of API clients, database, and bot uptime."""
+    db = _get_db(context)
+    f1_data = context.bot_data["f1_data"]
+
+    # Database status
+    db_connected = db.db is not None
+    db_size = "?"
+    if os.path.exists(settings.DB_PATH):
+        size_bytes = os.path.getsize(settings.DB_PATH)
+        if size_bytes >= 1024 * 1024:
+            db_size = f"{size_bytes / (1024 * 1024):.2f} MB"
+        else:
+            db_size = f"{size_bytes / 1024:.1f} KB"
+
+    # Jolpica circuit breaker
+    jolpica_cb = f1_data.jolpica._circuit_breaker
+    jolpica_state = "OPEN" if jolpica_cb._open else "CLOSED"
+    jolpica_failures = jolpica_cb._failures
+    jolpica_threshold = jolpica_cb._threshold
+
+    # OpenF1 circuit breaker
+    openf1_cb = f1_data.openf1._circuit_breaker
+    openf1_state = "OPEN" if openf1_cb._open else "CLOSED"
+    openf1_failures = openf1_cb._failures
+    openf1_threshold = openf1_cb._threshold
+
+    # Cache stats
+    jolpica_cache_count = len(f1_data.jolpica._cache._store)
+    openf1_cache_count = len(f1_data.openf1._cache._store)
+
+    # Bot uptime
+    start_time = context.bot_data.get("start_time")
+    if start_time:
+        uptime = datetime.now(timezone.utc) - start_time
+        days = uptime.days
+        hours, remainder = divmod(uptime.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
+    else:
+        uptime_str = "unknown"
+
+    lines = [
+        "*System Health*\n",
+        "*Database:*",
+        f"  Status: {'connected' if db_connected else 'disconnected'}",
+        f"  Size: {db_size}",
+        "",
+        "*Jolpica API:*",
+        f"  Circuit breaker: {jolpica_state}",
+        f"  Failures: {jolpica_failures}/{jolpica_threshold}",
+        "",
+        "*OpenF1 API:*",
+        f"  Circuit breaker: {openf1_state}",
+        f"  Failures: {openf1_failures}/{openf1_threshold}",
+        "",
+        "*Cache:*",
+        f"  Jolpica entries: {jolpica_cache_count}",
+        f"  OpenF1 entries: {openf1_cache_count}",
+        "",
+        f"*Uptime:* {uptime_str}",
+    ]
+
+    await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
+
+
 def setup_admin_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("admin_status", admin_status))
     app.add_handler(CommandHandler("admin_addrace", admin_addrace))
@@ -400,3 +467,4 @@ def setup_admin_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("admin_simulate", admin_simulate))
     app.add_handler(CommandHandler("admin_export", admin_export))
     app.add_handler(CommandHandler("admin_cancelrace", admin_cancelrace))
+    app.add_handler(CommandHandler("admin_health", admin_health))
