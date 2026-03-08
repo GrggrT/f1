@@ -14,7 +14,6 @@ from telegram.ext import (
     filters,
 )
 
-from config import settings
 from data.database import Database
 from data.models import UserTeam
 from services.budget import (
@@ -85,6 +84,50 @@ async def pickteam_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 # ── DM ConversationHandler ──
+
+async def menu_team_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle 🏎 Команда menu button: show existing team or start picker."""
+    db = _get_db(context)
+    race_round = await _get_next_round(context)
+
+    if race_round is not None:
+        existing = await db.get_team(update.effective_user.id, race_round)
+        if existing:
+            return await _show_existing_team(update, context, existing)
+
+    # No team for current round — start picker
+    return await pickteam_start(update, context)
+
+
+async def _show_existing_team(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    team: UserTeam,
+) -> int:
+    """Display an already-saved team with action buttons."""
+    turbo = team.turbo_driver
+    drivers_str = "\n".join(
+        f"  {'⚡ ' if d == turbo else '  '}{get_driver_name(d)} (${get_driver_price(d):.0f}M)"
+        for d in team.drivers
+    )
+    constructor_str = f"{get_constructor_name(team.constructor)} (${get_constructor_price(team.constructor):.0f}M)"
+
+    text = (
+        f"🏎 *Твоя команда (Round {team.race_round}):*\n\n"
+        f"🏎 *Пилоты:*\n{drivers_str}\n\n"
+        f"🏗 *Конструктор:* {constructor_str}\n"
+        f"⚡ *DRS Boost:* {get_driver_name(turbo)}\n"
+        f"💰 *Остаток:* ${team.budget_remaining:.1f}M"
+    )
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 Трансферы", callback_data="post_transfer")],
+        [InlineKeyboardButton("🔧 Пересобрать команду", callback_data="post_rebuild")],
+        [InlineKeyboardButton("📢 Поделиться в группе", callback_data=f"share:team:{team.race_round}")],
+    ])
+    await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
+    return ConversationHandler.END
+
 
 async def pickteam_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # Only handle /start if it's a deep link with "pickteam" arg
@@ -365,21 +408,15 @@ async def confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     db = _get_db(context)
     await db.save_team(update.effective_user.id, race_round, team)
 
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("👀 Моя команда", callback_data="post_myteam")],
+        [InlineKeyboardButton("🔄 Трансферы", callback_data="post_transfer")],
+        [InlineKeyboardButton("📢 Поделиться в группе", callback_data=f"share:team:{race_round}")],
+    ])
     await query.edit_message_text(
-        "\u2705 \u041a\u043e\u043c\u0430\u043d\u0434\u0430 \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u0430! \u0423\u0434\u0430\u0447\u0438 \u0432 \u044d\u0442\u043e\u043c \u0440\u0430\u0443\u043d\u0434\u0435 \U0001f3c1"
+        "✅ Команда сохранена! Удачи в этом раунде 🏁",
+        reply_markup=keyboard,
     )
-
-    # Notify group
-    for chat_id in settings.GROUP_CHAT_IDS:
-        username = update.effective_user.username
-        display = f"@{username}" if username else update.effective_user.full_name
-        try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"\u2705 {display} \u043e\u0431\u043d\u043e\u0432\u0438\u043b \u043a\u043e\u043c\u0430\u043d\u0434\u0443!",
-            )
-        except Exception:
-            logger.warning("Could not send group notification to %s", chat_id)
 
     return ConversationHandler.END
 
@@ -661,26 +698,17 @@ async def transfer_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if penalty > 0:
         penalty_msg = f"\n⚠️ Штраф: -{penalty} очков"
 
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📢 Поделиться в группе", callback_data=f"share:team:{race_round}")],
+    ])
     await query.edit_message_text(
         f"✅ *Трансфер выполнен!*\n\n"
         f"❌ {get_driver_name(driver_out)} → ✅ {get_driver_name(driver_in)}"
         f"{penalty_msg}\n\n"
         f"💰 Остаток бюджета: ${TOTAL_BUDGET - new_cost:.1f}M",
+        reply_markup=keyboard,
         parse_mode="Markdown",
     )
-
-    # Notify group
-    for chat_id in settings.GROUP_CHAT_IDS:
-        username = update.effective_user.username
-        display = f"@{username}" if username else update.effective_user.full_name
-        try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"🔄 {display} сделал трансфер: "
-                     f"{get_driver_name(driver_out)} → {get_driver_name(driver_in)}",
-            )
-        except Exception:
-            logger.warning("Could not send group notification for transfer to %s", chat_id)
 
     return ConversationHandler.END
 
@@ -695,6 +723,49 @@ async def transfer_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return ConversationHandler.END
 
 
+async def post_team_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle post-team-build action buttons."""
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "post_myteam":
+        db = _get_db(context)
+        team = await db.get_latest_team(update.effective_user.id)
+        if team is None:
+            await query.edit_message_text("У тебя ещё нет команды.")
+            return
+
+        turbo = team.turbo_driver
+        drivers_str = "\n".join(
+            f"  {'⚡ ' if d == turbo else '  '}{get_driver_name(d)} (${get_driver_price(d):.0f}M)"
+            for d in team.drivers
+        )
+        constructor_str = f"{get_constructor_name(team.constructor)} (${get_constructor_price(team.constructor):.0f}M)"
+
+        text = (
+            f"🏎 *Твоя команда (Round {team.race_round}):*\n\n"
+            f"🏎 *Пилоты:*\n{drivers_str}\n\n"
+            f"🏗 *Конструктор:* {constructor_str}\n"
+            f"⚡ *DRS Boost:* {get_driver_name(turbo)}\n"
+            f"💰 *Остаток:* ${team.budget_remaining:.1f}M"
+        )
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📢 Поделиться в группе", callback_data=f"share:team:{team.race_round}")],
+        ])
+        await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
+
+    elif query.data == "post_transfer":
+        await query.edit_message_text(
+            "🔄 Используй /transfer для трансферов."
+        )
+
+    elif query.data == "post_rebuild":
+        await query.edit_message_text(
+            "🔧 Используй /pickteam чтобы пересобрать команду."
+        )
+
+
 def setup_team_handlers(app: Application) -> None:
     conv_handler = ConversationHandler(
         entry_points=[
@@ -702,7 +773,7 @@ def setup_team_handlers(app: Application) -> None:
             CommandHandler("start", pickteam_start),
             MessageHandler(
                 filters.Text([MENU_TEAM]) & filters.ChatType.PRIVATE,
-                pickteam_start,
+                menu_team_handler,
             ),
         ],
         states={
@@ -740,3 +811,4 @@ def setup_team_handlers(app: Application) -> None:
         per_message=False,
     )
     app.add_handler(transfer_conv)
+    app.add_handler(CallbackQueryHandler(post_team_action, pattern=r"^post_(myteam|transfer|rebuild)$"))
