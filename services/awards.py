@@ -167,10 +167,11 @@ class AwardsEngine:
             return ""
 
         # Get all rounds with scores
-        cursor = await self.db.db.execute(
-            "SELECT DISTINCT race_round FROM scores ORDER BY race_round"
-        )
-        rounds = [row[0] for row in await cursor.fetchall()]
+        async with self.db.pool.acquire() as conn:
+            rows = await conn.fetch(
+                "SELECT DISTINCT race_round FROM scores ORDER BY race_round"
+            )
+        rounds = [row["race_round"] for row in rows]
         if not rounds:
             return ""
 
@@ -208,10 +209,10 @@ class AwardsEngine:
 
     async def generate_rival_h2h(self, race_round: int) -> str:
         """Generate H2H update specifically for registered rivals."""
-        cursor = await self.db.db.execute(
-            "SELECT DISTINCT user_id, rival_id FROM h2h_rivals"
-        )
-        rival_pairs = await cursor.fetchall()
+        async with self.db.pool.acquire() as conn:
+            rival_pairs = await conn.fetch(
+                "SELECT DISTINCT user_id, rival_id FROM h2h_rivals"
+            )
         if not rival_pairs:
             return ""
 

@@ -208,12 +208,12 @@ async def post_midweek_content(context: CallbackContext) -> None:
     db: Database = context.bot_data["db"]
 
     # Get latest scores
-    cursor = await db.db.execute("SELECT MAX(race_round) FROM scores")
-    row = await cursor.fetchone()
-    if not row or not row[0]:
+    async with db.pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT MAX(race_round) as max_round FROM scores")
+    if not row or not row["max_round"]:
         return
 
-    last_round = row[0]
+    last_round = row["max_round"]
     standings = await db.get_standings()
     if not standings:
         return

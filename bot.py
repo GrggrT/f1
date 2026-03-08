@@ -27,11 +27,12 @@ logger = get_logger(__name__)
 
 async def post_init(app: Application) -> None:
     # Database
-    db = Database(settings.DB_PATH)
+    dsn = settings.DATABASE_URL or settings.DB_PATH
+    db = Database(dsn)
     await db.connect()
     app.bot_data["db"] = db
     app.bot_data["start_time"] = datetime.now(timezone.utc)
-    logger.info("Database initialized at %s", settings.DB_PATH)
+    logger.info("Database initialized at %s", dsn)
 
     # F1 Data Service
     f1_data = F1DataService()

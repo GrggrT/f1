@@ -32,11 +32,11 @@ async def results_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await update.message.reply_text("Ещё нет результатов.")
             return
         # Get max round from scores
-        cursor = await db.db.execute(
-            "SELECT MAX(race_round) FROM scores"
-        )
-        row = await cursor.fetchone()
-        round_num = row[0] if row and row[0] else None
+        async with db.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT MAX(race_round) as max_round FROM scores"
+            )
+        round_num = row["max_round"] if row and row["max_round"] else None
 
     if round_num is None:
         await update.message.reply_text("Ещё нет результатов.")

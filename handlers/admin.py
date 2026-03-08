@@ -210,15 +210,15 @@ async def admin_resetuser(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user_id = int(context.args[0])
     round_num = int(context.args[1])
 
-    await db.db.execute(
-        "DELETE FROM teams WHERE user_id = ? AND race_round = ?",
-        (user_id, round_num),
-    )
-    await db.db.execute(
-        "DELETE FROM scores WHERE user_id = ? AND race_round = ?",
-        (user_id, round_num),
-    )
-    await db.db.commit()
+    async with db.pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM teams WHERE user_id = $1 AND race_round = $2",
+            user_id, round_num,
+        )
+        await conn.execute(
+            "DELETE FROM scores WHERE user_id = $1 AND race_round = $2",
+            user_id, round_num,
+        )
 
     await update.message.reply_text(f"\u2705 Reset user {user_id} for round {round_num}")
 

@@ -1,0 +1,17 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "api/**/*.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/api/webhook", "dest": "/api/webhook.py", "methods": ["POST", "GET"] },
+    { "src": "/api/cron/race-events", "dest": "/api/cron/race_events.py" },
+    { "src": "/api/cron/poll-results", "dest": "/api/cron/poll_results.py" },
+    { "src": "/api/cron/daily", "dest": "/api/cron/daily.py" }
+  ],
+  "crons": [
+    { "path": "/api/cron/race-events", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/poll-results", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/daily", "schedule": "0 10,12,18 * * *" }
+  ]
+}

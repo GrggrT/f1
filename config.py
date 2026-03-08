@@ -3,7 +3,10 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     BOT_TOKEN: str
-    DB_PATH: str = "data/fantasy.db"
+    DATABASE_URL: str = ""
+    DB_PATH: str = "data/fantasy.db"  # Keep for backward compat / local dev
+    WEBHOOK_SECRET: str = ""
+    CRON_SECRET: str = ""
     ADMIN_IDS: list[int] = []
     GROUP_CHAT_IDS: list[int] = []
     JOLPICA_BASE_URL: str = "https://api.jolpi.ca/ergast/f1"
@@ -18,7 +21,6 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
     def model_post_init(self, __context) -> None:
-        # Backward compatibility: also read GROUP_CHAT_ID (single int)
         import os
         if not self.GROUP_CHAT_IDS:
             single = os.environ.get("GROUP_CHAT_ID", "0")
