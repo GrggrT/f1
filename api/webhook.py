@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import traceback
 
 from http.server import BaseHTTPRequestHandler
 
@@ -66,6 +68,14 @@ async def _get_app():
     return app
 
 
+async def _process(body: bytes) -> None:
+    from telegram import Update
+    app = await _get_app()
+    data = json.loads(body)
+    update = Update.de_json(data, app.bot)
+    await app.process_update(update)
+
+
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         # Verify webhook secret
@@ -79,18 +89,17 @@ class handler(BaseHTTPRequestHandler):
         content_length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(content_length)
 
-        import asyncio
-        asyncio.get_event_loop().run_until_complete(self._process(body))
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(_process(body))
+            loop.close()
+        except Exception:
+            logger.exception("Webhook processing failed")
+            traceback.print_exc()
 
         self.send_response(200)
         self.end_headers()
-
-    async def _process(self, body: bytes) -> None:
-        from telegram import Update
-        app = await _get_app()
-        data = json.loads(body)
-        update = Update.de_json(data, app.bot)
-        await app.process_update(update)
 
     def do_GET(self):
         """Health check endpoint."""

@@ -10,8 +10,6 @@
     { "src": "/api/cron/daily", "dest": "/api/cron/daily.py" }
   ],
   "crons": [
-    { "path": "/api/cron/race-events", "schedule": "*/15 * * * *" },
-    { "path": "/api/cron/poll-results", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/daily", "schedule": "0 10,12,18 * * *" }
+    { "path": "/api/cron/daily", "schedule": "0 10 * * *" }
   ]
 }
