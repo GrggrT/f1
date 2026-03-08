@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import random
 from datetime import datetime, timezone
 
@@ -32,15 +31,9 @@ async def admin_status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     race = await db.get_next_race()
     jobs = context.job_queue.jobs() if context.job_queue else []
 
-    db_size = "?"
-    if os.path.exists(settings.DB_PATH):
-        size_bytes = os.path.getsize(settings.DB_PATH)
-        db_size = f"{size_bytes / 1024:.1f} KB"
-
     lines = [
         "\U0001f527 *Admin Status*\n",
         f"Users: {len(users)}",
-        f"DB size: {db_size}",
         f"Active jobs: {len(list(jobs))}",
     ]
 
@@ -225,17 +218,23 @@ async def admin_resetuser(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 @admin_only
 async def admin_backup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send SQLite database file to admin DM."""
-    if not os.path.exists(settings.DB_PATH):
-        await update.message.reply_text("Database file not found.")
-        return
-
-    await context.bot.send_document(
-        chat_id=update.effective_user.id,
-        document=open(settings.DB_PATH, "rb"),
-        filename=f"fantasy_backup_{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y%m%d_%H%M')}.db",
-        caption="\U0001f4be Database backup",
-    )
+    """Show database info (PostgreSQL — no file backup)."""
+    db = _get_db(context)
+    try:
+        async with db.pool.acquire() as conn:
+            size = await conn.fetchval(
+                "SELECT pg_size_pretty(pg_database_size(current_database()))"
+            )
+            tables = await conn.fetch(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+            )
+        table_list = ", ".join(t["tablename"] for t in tables)
+        await update.message.reply_text(
+            f"💾 *Database Info*\n\nSize: {size}\nTables: {table_list}",
+            parse_mode="Markdown",
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error: {e}")
 
 
 @admin_only
@@ -443,14 +442,8 @@ async def admin_health(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     f1_data = context.bot_data["f1_data"]
 
     # Database status
-    db_connected = db.db is not None
-    db_size = "?"
-    if os.path.exists(settings.DB_PATH):
-        size_bytes = os.path.getsize(settings.DB_PATH)
-        if size_bytes >= 1024 * 1024:
-            db_size = f"{size_bytes / (1024 * 1024):.2f} MB"
-        else:
-            db_size = f"{size_bytes / 1024:.1f} KB"
+    db_connected = db._pool is not None
+    db_size = "PostgreSQL"
 
     # Jolpica circuit breaker
     jolpica_cb = f1_data.jolpica._circuit_breaker

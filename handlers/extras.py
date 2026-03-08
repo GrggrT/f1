@@ -19,6 +19,14 @@ def _get_db(context: ContextTypes.DEFAULT_TYPE) -> Database:
 # ── /predstandings ──
 
 async def predstandings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_chat.type != "private":
+        bot_me = await context.bot.get_me()
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("🎯 Prediction Standings", url=f"https://t.me/{bot_me.username}?start=predstandings")
+        ]])
+        await update.message.reply_text("Эта команда работает в личке 👇", reply_markup=keyboard)
+        return
+
     db = _get_db(context)
     standings = await db.get_prediction_standings()
 
@@ -118,6 +126,14 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 # ── /chart (text-based standings progression) ──
 
 async def chart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_chat.type != "private":
+        bot_me = await context.bot.get_me()
+        keyboard = InlineKeyboardMarkup([[
+            InlineKeyboardButton("📈 Chart", url=f"https://t.me/{bot_me.username}?start=chart")
+        ]])
+        await update.message.reply_text("Эта команда работает в личке 👇", reply_markup=keyboard)
+        return
+
     db = _get_db(context)
     all_scores = await db.get_all_scores_by_round()
 
@@ -181,8 +197,10 @@ async def chart_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 # ── Group inline quick buttons ──
 
 async def group_quick_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show quick action buttons in group chat."""
+    """Show quick action buttons in group chat, or main menu in DM."""
     if update.effective_chat.type == "private":
+        from handlers.start import start_command
+        await start_command(update, context)
         return
 
     bot_username = (await context.bot.get_me()).username
@@ -238,21 +256,52 @@ async def group_inline_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.message.reply_text(text, parse_mode="Markdown")
 
     elif query.data == "grp_chart":
-        # Reuse chart logic
-        update_proxy = type('obj', (object,), {
-            'message': query.message,
-            'effective_chat': update.effective_chat,
-            'effective_user': update.effective_user,
-        })()
-        await chart_command(update_proxy, context)
+        db = _get_db(context)
+        all_scores = await db.get_all_scores_by_round()
+        if not all_scores:
+            await query.message.reply_text("No data for chart yet.")
+            return
+        from collections import defaultdict as dd
+        user_cumulative: dict[str, dict[int, float]] = dd(dict)
+        user_running: dict[str, float] = dd(float)
+        all_rounds = sorted(set(s["race_round"] for s in all_scores))
+        for s in all_scores:
+            username = s["username"] or str(s["user_id"])
+            user_running[username] += s["fantasy_points"]
+            user_cumulative[username][s["race_round"]] = user_running[username]
+        final_totals = {u: max(rounds.values()) for u, rounds in user_cumulative.items()}
+        sorted_users = sorted(final_totals, key=lambda u: -final_totals[u])
+        lines = ["📈 *Standings Progression*\n", "```"]
+        header = f"{'Manager':<12}"
+        for r in all_rounds:
+            header += f" R{r:>2}"
+        header += "  Total"
+        lines.append(header)
+        lines.append("-" * len(header))
+        for username in sorted_users:
+            row = f"{username:<12}"
+            for r in all_rounds:
+                pts = user_cumulative[username].get(r)
+                row += f" {pts:>3.0f}" if pts is not None else "   -"
+            row += f"  {final_totals[username]:>5.0f}"
+            lines.append(row)
+        lines.append("```")
+        await query.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
     elif query.data == "grp_predstandings":
-        update_proxy = type('obj', (object,), {
-            'message': query.message,
-            'effective_chat': update.effective_chat,
-            'effective_user': update.effective_user,
-        })()
-        await predstandings_command(update_proxy, context)
+        db = _get_db(context)
+        standings = await db.get_prediction_standings()
+        if not standings:
+            await query.message.reply_text("Prediction standings will appear after the first race.")
+            return
+        lines = ["🎯 *Prediction Standings*\n", "```"]
+        lines.append(f"{'#':>2} {'Manager':<12} {'Corr':>4} {'Pts':>4} {'R':>2}")
+        lines.append("-" * 28)
+        for i, row in enumerate(standings, 1):
+            row = dict(row) if not isinstance(row, dict) else row
+            lines.append(f"{i:>2} {row.get('username', '???'):<12} {row.get('total_correct', 0):>4} {row.get('total_score', 0):>4} {row.get('rounds_played', 0):>2}")
+        lines.append("```")
+        await query.message.reply_text("\n".join(lines), parse_mode="Markdown")
 
     elif query.data == "grp_survivor":
         from handlers.survivor import survivor_standings_command

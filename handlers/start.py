@@ -73,6 +73,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             from handlers.h2h import driver_command
             await driver_command(update, context)
             return
+        elif arg == "results":
+            from handlers.results import results_command
+            await results_command(update, context)
+            return
+        elif arg == "predstandings":
+            from handlers.extras import predstandings_command
+            await predstandings_command(update, context)
+            return
+        elif arg == "chart":
+            from handlers.extras import chart_command
+            await chart_command(update, context)
+            return
 
     if update.effective_chat.type != "private":
         await update.message.reply_text(
@@ -525,7 +537,6 @@ ROUTER_MENU_TEXTS = [
 
 def setup_start_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("start", start_command))
-    app.add_handler(CommandHandler("menu", start_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("join", join_command))
     app.add_handler(CommandHandler("rules", rules_command))
