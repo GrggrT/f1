@@ -474,6 +474,20 @@ class Database:
         )
         await self.db.commit()
 
+    async def get_prediction(self, user_id: int, race_round: int) -> Prediction | None:
+        cursor = await self.db.execute(
+            "SELECT * FROM predictions WHERE user_id = ? AND race_round = ?",
+            (user_id, race_round),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return Prediction(
+            user_id=row["user_id"],
+            race_round=row["race_round"],
+            questions=json.loads(row["questions"]),
+        )
+
     async def get_predictions(self, race_round: int) -> list[Prediction]:
         cursor = await self.db.execute(
             "SELECT * FROM predictions WHERE race_round = ?", (race_round,)

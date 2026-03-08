@@ -82,6 +82,37 @@ async def results_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         lines.append(f"\n\U0001f3c6 *Best Manager:* {best_name} ({best['fantasy_points']:.0f} pts)")
         lines.append(f"\U0001f4a9 *Worst Manager:* {worst_name} ({worst['fantasy_points']:.0f} pts)")
 
+    # Personal breakdown (DM only)
+    if update.effective_chat.type == "private":
+        user_score = None
+        for s in scores_data:
+            if s["user_id"] == update.effective_user.id:
+                user_score = s
+                break
+        if user_score and user_score.get("breakdown"):
+            breakdown = user_score["breakdown"]
+            if isinstance(breakdown, str):
+                breakdown = json.loads(breakdown)
+            if isinstance(breakdown, dict) and "drivers" in breakdown:
+                lines.append(f"\n\U0001f4ca *\u0422\u0432\u043e\u0438 \u043e\u0447\u043a\u0438 \u2014 Round {round_num}*\n")
+                lines.append("```")
+                for did, dscores in breakdown["drivers"].items():
+                    dname = get_driver_name(did)
+                    if len(dname) > 14:
+                        dname = dname[:13] + "."
+                    dtotal = dscores.get("total", 0) if isinstance(dscores, dict) else 0
+                    turbo = " \u26a1" if did == breakdown.get("turbo_driver") else ""
+                    lines.append(f"{dname:<14} {dtotal:>5.0f}{turbo}")
+                # Constructor
+                cdata = breakdown.get("constructor", {})
+                ctotal = cdata.get("total", 0) if isinstance(cdata, dict) else 0
+                lines.append(f"{'Constructor':<14} {ctotal:>5.0f}")
+                # Penalty
+                penalty = breakdown.get("transfer_penalty", 0)
+                if penalty:
+                    lines.append(f"{'Transfer pen.':<14} {-penalty:>5.0f}")
+                lines.append("```")
+
     # Top scoring driver
     if race_results:
         best_driver = None

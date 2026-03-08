@@ -4,7 +4,7 @@ set -e
 echo "=== F1 Fantasy Bot — Deploy ==="
 
 # Install system deps
-sudo apt update && sudo apt install -y python3.11 python3.11-venv python3-pip git
+sudo apt update && sudo apt install -y python3.12 python3.12-venv python3-pip git
 
 # Clone or pull
 REPO_DIR="/home/ubuntu/f1-fantasy-bot"
@@ -13,12 +13,12 @@ if [ -d "$REPO_DIR" ]; then
     cd "$REPO_DIR" && git pull
 else
     echo "Cloning repo..."
-    git clone https://github.com/<your-repo>/f1-fantasy-bot.git "$REPO_DIR"
+    git clone https://github.com/GrggrT/f1.git "$REPO_DIR"
     cd "$REPO_DIR"
 fi
 
 # Venv
-python3.11 -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 

@@ -42,8 +42,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if context.args:
         arg = context.args[0]
         if arg == "pickteam":
-            from handlers.team import pickteam_command
-            await pickteam_command(update, context)
+            from handlers.team import pickteam_start
+            await pickteam_start(update, context)
             return
         elif arg == "myteam":
             from handlers.team import myteam_command

@@ -146,9 +146,9 @@ def build_confirmation_keyboard() -> InlineKeyboardMarkup:
 
 def build_chips_keyboard(available: list[str]) -> InlineKeyboardMarkup:
     chip_names = {
-        "WILDCARD": "\U0001f0cf Wildcard",
-        "TRIPLE_BOOST": "\U0001f4a5 Triple Boost (3x)",
-        "NO_NEGATIVE": "\U0001f6e1 No Negative",
+        "WILDCARD": "\U0001f0cf Wildcard — неограниченные трансферы",
+        "TRIPLE_BOOST": "\U0001f4a5 Triple Boost — 3x очки одного пилота",
+        "NO_NEGATIVE": "\U0001f6e1 No Negative — отрицательные очки обнуляются",
     }
     buttons = [
         [InlineKeyboardButton(chip_names.get(c, c), callback_data=f"chip_{c}")]

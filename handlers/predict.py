@@ -81,6 +81,23 @@ async def predict_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             update.effective_user.full_name,
         )
 
+    # Check if user already has predictions for this round
+    existing = await db.get_prediction(update.effective_user.id, race.round)
+    if existing:
+        text = (
+            f"\U0001f504 *\u0423 \u0442\u0435\u0431\u044f \u0443\u0436\u0435 \u0435\u0441\u0442\u044c \u043f\u0440\u043e\u0433\u043d\u043e\u0437\u044b \u043d\u0430 Round {race.round}!*\n\n"
+            f"\u0425\u043e\u0447\u0435\u0448\u044c \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u0438\u0445?"
+        )
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("\U0001f504 \u0414\u0430, \u0437\u0430\u043d\u043e\u0432\u043e", callback_data="pred_overwrite"),
+                InlineKeyboardButton("\u274c \u041d\u0435\u0442, \u043e\u0441\u0442\u0430\u0432\u0438\u0442\u044c", callback_data="pred_keep"),
+            ]
+        ])
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
+        context.user_data["pred_round"] = race.round
+        return ASK_ANSWER
+
     # Generate questions
     questions = prediction_service.generate_questions(race, race.round)
     context.user_data["pred_questions"] = questions
@@ -180,6 +197,18 @@ async def _show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         lines.append(f"Q{qid}: {q['text']}")
         lines.append(f"   {ans_text} (conf: {'*' * conf})\n")
 
+    # Show deadline countdown
+    db = _get_db(context)
+    race = await db.get_next_race()
+    if race:
+        deadline = datetime.fromisoformat(race.race_datetime)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        remaining = deadline - now
+        if remaining.total_seconds() > 0:
+            hours = int(remaining.total_seconds() // 3600)
+            minutes = int((remaining.total_seconds() % 3600) // 60)
+            lines.append(f"\u23f0 \u0414\u0435\u0434\u043b\u0430\u0439\u043d: {hours}\u0447 {minutes}\u043c\u0438\u043d\n")
+
     text = "\n".join(lines)
     keyboard = InlineKeyboardMarkup([
         [
@@ -204,6 +233,20 @@ async def confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """Handle confirm/restart for predictions."""
     query = update.callback_query
     await query.answer()
+
+    if query.data == "pred_keep":
+        await query.edit_message_text("\u2705 \u041f\u0440\u043e\u0433\u043d\u043e\u0437\u044b \u0431\u0435\u0437 \u0438\u0437\u043c\u0435\u043d\u0435\u043d\u0438\u0439.")
+        return ConversationHandler.END
+
+    if query.data == "pred_overwrite":
+        # Start fresh prediction flow
+        db = _get_db(context)
+        race = await db.get_next_race()
+        questions = prediction_service.generate_questions(race, race.round)
+        context.user_data["pred_questions"] = questions
+        context.user_data["pred_answers"] = {}
+        context.user_data["pred_current"] = 0
+        return await _show_question(update, context)
 
     if query.data == "pred_restart":
         context.user_data["pred_answers"] = {}
@@ -262,7 +305,7 @@ def setup_predict_handlers(app: Application) -> None:
         ],
         states={
             ASK_ANSWER: [
-                CallbackQueryHandler(confirm_callback, pattern=r"^pred_(confirm|restart)$"),
+                CallbackQueryHandler(confirm_callback, pattern=r"^pred_(confirm|restart|overwrite|keep)$"),
                 CallbackQueryHandler(answer_callback, pattern=r"^pred_(yes|no)$"),
             ],
             ASK_CONFIDENCE: [
