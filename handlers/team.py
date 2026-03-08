@@ -130,11 +130,6 @@ async def _show_existing_team(
 
 
 async def pickteam_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    # Only handle /start if it's a deep link with "pickteam" arg
-    if update.message and update.message.text and update.message.text.startswith("/start"):
-        if not context.args or context.args[0] != "pickteam":
-            return ConversationHandler.END
-
     if not await _check_deadline(context):
         await update.message.reply_text(
             "\u26a0\ufe0f \u0414\u0435\u0434\u043b\u0430\u0439\u043d \u043f\u0440\u043e\u0448\u0451\u043b \u0438\u043b\u0438 \u043d\u0435\u0442 \u0437\u0430\u043f\u043b\u0430\u043d\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0445 \u0433\u043e\u043d\u043e\u043a!"
@@ -770,7 +765,6 @@ def setup_team_handlers(app: Application) -> None:
     conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("pickteam", pickteam_start),
-            CommandHandler("start", pickteam_start),
             MessageHandler(
                 filters.Text([MENU_TEAM]) & filters.ChatType.PRIVATE,
                 menu_team_handler,

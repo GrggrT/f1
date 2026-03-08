@@ -14,7 +14,6 @@ from telegram.ext import (
     filters,
 )
 
-from config import settings
 from data.database import Database
 from data.models import Prediction
 from services.predictions import PredictionService
@@ -84,17 +83,38 @@ async def predict_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     # Check if user already has predictions for this round
     existing = await db.get_prediction(update.effective_user.id, race.round)
     if existing:
-        text = (
-            f"\U0001f504 *\u0423 \u0442\u0435\u0431\u044f \u0443\u0436\u0435 \u0435\u0441\u0442\u044c \u043f\u0440\u043e\u0433\u043d\u043e\u0437\u044b \u043d\u0430 Round {race.round}!*\n\n"
-            f"\u0425\u043e\u0447\u0435\u0448\u044c \u043f\u0435\u0440\u0435\u0437\u0430\u043f\u0438\u0441\u0430\u0442\u044c \u0438\u0445?"
-        )
+        # Show existing predictions with details
+        questions = prediction_service.generate_questions(race, race.round)
+        answers = existing.questions
+        if isinstance(answers, str):
+            import json
+            answers = json.loads(answers)
+
+        lines = [f"🎯 *Твои прогнозы — Round {race.round} ({race.name})*\n"]
+        for q in questions:
+            qid = q["id"]
+            a = answers.get(qid, {})
+            if a:
+                ans_text = "Да ✅" if a.get("answer") else "Нет ❌"
+                conf = a.get("confidence", 0)
+                lines.append(f"*Q{qid}.* {q['text']}")
+                lines.append(f"   {ans_text} (уверенность: {'⭐' * conf})\n")
+            else:
+                lines.append(f"*Q{qid}.* {q['text']}")
+                lines.append(f"   — нет ответа\n")
+
+        lines.append("Хочешь перезаписать?")
+
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("\U0001f504 \u0414\u0430, \u0437\u0430\u043d\u043e\u0432\u043e", callback_data="pred_overwrite"),
-                InlineKeyboardButton("\u274c \u041d\u0435\u0442, \u043e\u0441\u0442\u0430\u0432\u0438\u0442\u044c", callback_data="pred_keep"),
-            ]
+                InlineKeyboardButton("🔄 Да, заново", callback_data="pred_overwrite"),
+                InlineKeyboardButton("✅ Оставить", callback_data="pred_keep"),
+            ],
+            [
+                InlineKeyboardButton("📢 Поделиться в группе", callback_data=f"share:predict:{race.round}"),
+            ],
         ])
-        await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
+        await update.message.reply_text("\n".join(lines), reply_markup=keyboard, parse_mode="Markdown")
         context.user_data["pred_round"] = race.round
         return ASK_ANSWER
 
@@ -265,21 +285,13 @@ async def confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
     await db.save_prediction(prediction)
 
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("\U0001f4e2 \u041f\u043e\u0434\u0435\u043b\u0438\u0442\u044c\u0441\u044f \u0432 \u0433\u0440\u0443\u043f\u043f\u0435", callback_data=f"share:predict:{race_round}")],
+    ])
     await query.edit_message_text(
-        "\u2705 \u041f\u0440\u043e\u0433\u043d\u043e\u0437\u044b \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u044b! \u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043f\u043e\u0441\u043b\u0435 \u0433\u043e\u043d\u043a\u0438. \u0423\u0434\u0430\u0447\u0438 \U0001f340"
+        "\u2705 \u041f\u0440\u043e\u0433\u043d\u043e\u0437\u044b \u0441\u043e\u0445\u0440\u0430\u043d\u0435\u043d\u044b! \u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u043f\u043e\u0441\u043b\u0435 \u0433\u043e\u043d\u043a\u0438. \u0423\u0434\u0430\u0447\u0438 \U0001f340",
+        reply_markup=keyboard,
     )
-
-    # Notify group
-    for chat_id in settings.GROUP_CHAT_IDS:
-        username = update.effective_user.username
-        display = f"@{username}" if username else update.effective_user.full_name
-        try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"\U0001f3af {display} \u0441\u0434\u0435\u043b\u0430\u043b \u043f\u0440\u043e\u0433\u043d\u043e\u0437\u044b!",
-            )
-        except Exception:
-            logger.warning("Could not send group prediction notification to %s", chat_id)
 
     return ConversationHandler.END
 

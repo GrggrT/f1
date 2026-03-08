@@ -1,7 +1,11 @@
+import logging
+
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 
 from data.database import Database
+
+logger = logging.getLogger(__name__)
 from services.budget import get_all_constructors, get_all_drivers
 from services.scoring import (
     BEAT_TEAMMATE_BONUS,
@@ -504,25 +508,32 @@ async def prices_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = update.message.text
+    logger.info("menu_router: received '%s'", text)
 
-    if text == MENU_STANDINGS:
-        from handlers.standings import standings_command
-        await standings_command(update, context)
-    elif text == MENU_RACE:
-        from handlers.nextrace import nextrace_command
-        await nextrace_command(update, context)
-    elif text == MENU_PRICES:
-        await prices_command(update, context)
-    elif text == MENU_RULES:
-        await rules_command(update, context)
-    elif text == MENU_HELP:
-        await help_command(update, context)
-    elif text == MENU_CHIPS:
-        from handlers.chips import chips_command
-        await chips_command(update, context)
-    elif text == MENU_SURVIVOR:
-        from handlers.survivor import survivor_dm
-        await survivor_dm(update, context)
+    try:
+        if text == MENU_STANDINGS:
+            from handlers.standings import standings_command
+            await standings_command(update, context)
+        elif text == MENU_RACE:
+            from handlers.nextrace import nextrace_command
+            await nextrace_command(update, context)
+        elif text == MENU_PRICES:
+            await prices_command(update, context)
+        elif text == MENU_RULES:
+            await rules_command(update, context)
+        elif text == MENU_HELP:
+            await help_command(update, context)
+        elif text == MENU_CHIPS:
+            from handlers.chips import chips_command
+            await chips_command(update, context)
+        elif text == MENU_SURVIVOR:
+            from handlers.survivor import survivor_dm
+            await survivor_dm(update, context)
+        else:
+            logger.warning("menu_router: unhandled text '%s'", text)
+    except Exception:
+        logger.exception("menu_router failed for '%s'", text)
+        await update.message.reply_text("⚠️ Произошла ошибка. Попробуй позже.")
 
 
 # These are NOT handled here — they're ConversationHandler entry points:
