@@ -189,6 +189,7 @@ class Database:
             min_size=1,
             max_size=5,
             command_timeout=30,
+            statement_cache_size=0,  # Required for pgBouncer (Supabase)
         )
         async with self._pool.acquire() as conn:
             for statement in CREATE_TABLES_STATEMENTS:
