@@ -206,6 +206,47 @@ class AwardsEngine:
 
         return "\n".join(lines)
 
+    async def generate_rival_h2h(self, race_round: int) -> str:
+        """Generate H2H update specifically for registered rivals."""
+        cursor = await self.db.db.execute(
+            "SELECT DISTINCT user_id, rival_id FROM h2h_rivals"
+        )
+        rival_pairs = await cursor.fetchall()
+        if not rival_pairs:
+            return ""
+
+        lines = ["\U0001f91c *Rival H2H Update*\n"]
+        for pair in rival_pairs:
+            user_id, rival_id = pair[0], pair[1]
+            record = await self.db.get_h2h_record(user_id, rival_id)
+            if not record["rounds"]:
+                continue
+            # Find this round's result
+            round_result = next((r for r in record["rounds"] if r["race_round"] == race_round), None)
+            if not round_result:
+                continue
+
+            user = await self.db.get_user(user_id)
+            rival = await self.db.get_user(rival_id)
+            u_name = f"@{user['username']}" if user and user.get("username") else str(user_id)
+            r_name = f"@{rival['username']}" if rival and rival.get("username") else str(rival_id)
+
+            if round_result["user_pts"] > round_result["rival_pts"]:
+                winner = u_name
+            elif round_result["rival_pts"] > round_result["user_pts"]:
+                winner = r_name
+            else:
+                winner = "Ничья!"
+
+            lines.append(
+                f"{u_name} vs {r_name}: "
+                f"{round_result['user_pts']:.0f}-{round_result['rival_pts']:.0f} "
+                f"(Сезон: {record['wins']}-{record['losses']}-{record['draws']}) "
+                f"\u2192 {winner}"
+            )
+
+        return "\n".join(lines) if len(lines) > 1 else ""
+
     def generate_roast(self, username: str, score: float) -> str:
         roast = random.choice(ROASTS)
         return f"@{username} ({score:.0f} pts) \u2014 {roast}"

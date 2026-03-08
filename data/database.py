@@ -115,6 +115,16 @@ CREATE TABLE IF NOT EXISTS transfers_log (
     FOREIGN KEY (user_id) REFERENCES users(telegram_id)
 );
 
+CREATE TABLE IF NOT EXISTS h2h_rivals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    rival_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (user_id) REFERENCES users(telegram_id),
+    FOREIGN KEY (rival_id) REFERENCES users(telegram_id),
+    UNIQUE(user_id, rival_id)
+);
+
 CREATE TABLE IF NOT EXISTS chips (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -133,6 +143,7 @@ CREATE INDEX IF NOT EXISTS idx_predictions_round ON predictions(race_round);
 CREATE INDEX IF NOT EXISTS idx_prediction_scores_user ON prediction_scores(user_id);
 CREATE INDEX IF NOT EXISTS idx_survivor_user ON survivor_picks(user_id);
 CREATE INDEX IF NOT EXISTS idx_race_results_round ON race_results(round);
+CREATE INDEX IF NOT EXISTS idx_h2h_rivals_user ON h2h_rivals(user_id);
 """
 
 
@@ -721,13 +732,13 @@ class Database:
         tables = [table] if table else [
             "users", "teams", "scores", "races", "race_results",
             "predictions", "prediction_scores", "survivor_picks",
-            "transfers_log", "chips",
+            "transfers_log", "h2h_rivals", "chips",
         ]
         result = {}
         for t in tables:
             if t not in {"users", "teams", "scores", "races", "race_results",
                           "predictions", "prediction_scores", "survivor_picks",
-                          "transfers_log", "chips"}:
+                          "transfers_log", "h2h_rivals", "chips"}:
                 continue  # prevent SQL injection
             query = f"SELECT * FROM {t}"
             params = []
@@ -738,6 +749,87 @@ class Database:
             rows = await cursor.fetchall()
             result[t] = [dict(r) for r in rows]
         return result
+
+    # ── H2H Rivals ──
+
+    async def set_rival(self, user_id: int, rival_id: int) -> bool:
+        """Set a rival for H2H tracking. Returns False if already set."""
+        try:
+            await self.db.execute(
+                "INSERT INTO h2h_rivals (user_id, rival_id) VALUES (?, ?)",
+                (user_id, rival_id),
+            )
+            await self.db.commit()
+            return True
+        except aiosqlite.IntegrityError:
+            return False
+
+    async def remove_rival(self, user_id: int, rival_id: int) -> None:
+        await self.db.execute(
+            "DELETE FROM h2h_rivals WHERE user_id = ? AND rival_id = ?",
+            (user_id, rival_id),
+        )
+        await self.db.commit()
+
+    async def get_rivals(self, user_id: int) -> list[dict]:
+        cursor = await self.db.execute(
+            """SELECT h.rival_id, u.username, u.display_name
+               FROM h2h_rivals h
+               JOIN users u ON h.rival_id = u.telegram_id
+               WHERE h.user_id = ?""",
+            (user_id,),
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+    async def get_h2h_record(self, user_id: int, rival_id: int) -> dict:
+        """Get H2H record between two users across all rounds."""
+        cursor = await self.db.execute(
+            """SELECT s1.race_round, s1.fantasy_points as user_pts, s2.fantasy_points as rival_pts,
+                      r.name as race_name
+               FROM scores s1
+               JOIN scores s2 ON s1.race_round = s2.race_round AND s2.user_id = ?
+               LEFT JOIN races r ON s1.race_round = r.round
+               WHERE s1.user_id = ?
+               ORDER BY s1.race_round""",
+            (rival_id, user_id),
+        )
+        rows = await cursor.fetchall()
+        results = [dict(r) for r in rows]
+        wins = sum(1 for r in results if r["user_pts"] > r["rival_pts"])
+        losses = sum(1 for r in results if r["user_pts"] < r["rival_pts"])
+        draws = sum(1 for r in results if r["user_pts"] == r["rival_pts"])
+        return {"rounds": results, "wins": wins, "losses": losses, "draws": draws}
+
+    # ── Driver Stats ──
+
+    async def get_driver_fantasy_stats(self, driver_id: str) -> list[dict]:
+        """Get fantasy scoring history for a driver across all rounds."""
+        cursor = await self.db.execute(
+            """SELECT rr.round, rr.grid_position, rr.finish_position, rr.dnf,
+                      rr.fastest_lap, r.name as race_name
+               FROM race_results rr
+               LEFT JOIN races r ON rr.round = r.round
+               WHERE rr.driver_id = ?
+               ORDER BY rr.round""",
+            (driver_id,),
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
+
+    async def get_driver_pick_stats(self, driver_id: str) -> list[dict]:
+        """Get how many teams picked this driver per round."""
+        cursor = await self.db.execute(
+            """SELECT t.race_round, COUNT(*) as pick_count,
+                      (SELECT COUNT(*) FROM teams t2 WHERE t2.race_round = t.race_round) as total_teams
+               FROM teams t
+               WHERE t.drivers LIKE ?
+               GROUP BY t.race_round
+               ORDER BY t.race_round""",
+            (f'%"{driver_id}"%',),
+        )
+        rows = await cursor.fetchall()
+        return [dict(r) for r in rows]
 
     async def cancel_race(self, round_num: int) -> None:
         """Mark a race as cancelled and clean up related data."""

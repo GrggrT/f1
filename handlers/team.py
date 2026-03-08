@@ -370,16 +370,16 @@ async def confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
     # Notify group
-    if settings.GROUP_CHAT_ID:
+    for chat_id in settings.GROUP_CHAT_IDS:
         username = update.effective_user.username
         display = f"@{username}" if username else update.effective_user.full_name
         try:
             await context.bot.send_message(
-                chat_id=settings.GROUP_CHAT_ID,
+                chat_id=chat_id,
                 text=f"\u2705 {display} \u043e\u0431\u043d\u043e\u0432\u0438\u043b \u043a\u043e\u043c\u0430\u043d\u0434\u0443!",
             )
         except Exception:
-            logger.warning("Could not send group notification")
+            logger.warning("Could not send group notification to %s", chat_id)
 
     return ConversationHandler.END
 
@@ -670,17 +670,17 @@ async def transfer_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
     # Notify group
-    if settings.GROUP_CHAT_ID:
+    for chat_id in settings.GROUP_CHAT_IDS:
         username = update.effective_user.username
         display = f"@{username}" if username else update.effective_user.full_name
         try:
             await context.bot.send_message(
-                chat_id=settings.GROUP_CHAT_ID,
+                chat_id=chat_id,
                 text=f"🔄 {display} сделал трансфер: "
                      f"{get_driver_name(driver_out)} → {get_driver_name(driver_in)}",
             )
         except Exception:
-            logger.warning("Could not send group notification for transfer")
+            logger.warning("Could not send group notification for transfer to %s", chat_id)
 
     return ConversationHandler.END
 

@@ -61,6 +61,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             from handlers.chips import chips_command
             await chips_command(update, context)
             return
+        elif arg == "rival":
+            from handlers.h2h import rival_command
+            await rival_command(update, context)
+            return
+        elif arg == "h2h":
+            from handlers.h2h import h2h_command
+            await h2h_command(update, context)
+            return
+        elif arg == "driver":
+            from handlers.h2h import driver_command
+            await driver_command(update, context)
+            return
 
     if update.effective_chat.type != "private":
         await update.message.reply_text(

@@ -16,15 +16,15 @@ logger = logging.getLogger(__name__)
 
 
 async def _send_group(context: CallbackContext, text: str) -> None:
-    if settings.GROUP_CHAT_ID:
+    for chat_id in settings.GROUP_CHAT_IDS:
         try:
             await context.bot.send_message(
-                chat_id=settings.GROUP_CHAT_ID,
+                chat_id=chat_id,
                 text=text,
                 parse_mode="Markdown",
             )
         except Exception:
-            logger.exception("Failed to send group message")
+            logger.exception("Failed to send group message to %s", chat_id)
 
 
 async def post_race_summary(context: CallbackContext, race_round: int) -> None:

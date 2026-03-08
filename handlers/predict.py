@@ -270,16 +270,16 @@ async def confirm_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
     # Notify group
-    if settings.GROUP_CHAT_ID:
+    for chat_id in settings.GROUP_CHAT_IDS:
         username = update.effective_user.username
         display = f"@{username}" if username else update.effective_user.full_name
         try:
             await context.bot.send_message(
-                chat_id=settings.GROUP_CHAT_ID,
+                chat_id=chat_id,
                 text=f"\U0001f3af {display} \u0441\u0434\u0435\u043b\u0430\u043b \u043f\u0440\u043e\u0433\u043d\u043e\u0437\u044b!",
             )
         except Exception:
-            logger.warning("Could not send group prediction notification")
+            logger.warning("Could not send group prediction notification to %s", chat_id)
 
     return ConversationHandler.END
 

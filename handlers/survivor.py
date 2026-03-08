@@ -179,16 +179,16 @@ async def survivor_confirm_callback(update: Update, context: ContextTypes.DEFAUL
         )
 
     # Notify group
-    if settings.GROUP_CHAT_ID:
+    for chat_id in settings.GROUP_CHAT_IDS:
         username = update.effective_user.username
         display = f"@{username}" if username else update.effective_user.full_name
         try:
             await context.bot.send_message(
-                chat_id=settings.GROUP_CHAT_ID,
+                chat_id=chat_id,
                 text=f"\U0001f3af {display} сделал survivor pick!",
             )
         except Exception as e:
-            logger.warning("Could not send group survivor notification: %s", e)
+            logger.warning("Could not send group survivor notification to %s: %s", chat_id, e)
 
 
 async def survivor_standings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

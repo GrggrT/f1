@@ -149,16 +149,16 @@ async def chip_confirm_callback(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
     # Notify group
-    if settings.GROUP_CHAT_ID:
+    for chat_id in settings.GROUP_CHAT_IDS:
         username = update.effective_user.username
         display = f"@{username}" if username else update.effective_user.full_name
         try:
             await context.bot.send_message(
-                chat_id=settings.GROUP_CHAT_ID,
+                chat_id=chat_id,
                 text=f"\u26a1 {display} активировал {name.split(' — ')[0]} на {race.name}!",
             )
         except Exception:
-            logger.warning("Could not send group chip notification")
+            logger.warning("Could not send group chip notification to %s", chat_id)
 
 
 def setup_chips_handlers(app: Application) -> None:

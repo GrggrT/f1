@@ -345,6 +345,54 @@ async def admin_export(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 @admin_only
+async def admin_export_csv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Export standings and scores as CSV."""
+    import csv
+    import io
+
+    db = _get_db(context)
+
+    # Standings CSV
+    standings = await db.get_standings()
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(["Rank", "User ID", "Username", "Total Points"])
+    for i, row in enumerate(standings, 1):
+        row = dict(row) if not isinstance(row, dict) else row
+        writer.writerow([i, row["user_id"], row.get("username", ""), row.get("total_points", 0)])
+
+    standings_bytes = buf.getvalue().encode("utf-8")
+    standings_buf = io.BytesIO(standings_bytes)
+    standings_buf.name = f"standings_{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y%m%d')}.csv"
+
+    await context.bot.send_document(
+        chat_id=update.effective_user.id,
+        document=standings_buf,
+        caption="\U0001f4ca Standings (CSV)",
+    )
+
+    # Scores per round CSV
+    data = await db.export_all_data("scores")
+    scores = data.get("scores", [])
+    if scores:
+        buf2 = io.StringIO()
+        writer2 = csv.writer(buf2)
+        writer2.writerow(["User ID", "Race Round", "Fantasy Points", "Created At"])
+        for s in scores:
+            writer2.writerow([s["user_id"], s["race_round"], s["fantasy_points"], s.get("created_at", "")])
+
+        scores_bytes = buf2.getvalue().encode("utf-8")
+        scores_buf = io.BytesIO(scores_bytes)
+        scores_buf.name = f"scores_{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y%m%d')}.csv"
+
+        await context.bot.send_document(
+            chat_id=update.effective_user.id,
+            document=scores_buf,
+            caption="\U0001f4ca All scores (CSV)",
+        )
+
+
+@admin_only
 async def admin_cancelrace(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Usage: /admin_cancelrace <round>"""
     if not context.args:
@@ -377,10 +425,10 @@ async def admin_cancelrace(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
 
     # Notify group
-    if settings.GROUP_CHAT_ID:
+    for chat_id in settings.GROUP_CHAT_IDS:
         try:
             await context.bot.send_message(
-                chat_id=settings.GROUP_CHAT_ID,
+                chat_id=chat_id,
                 text=f"\u26a0\ufe0f *Round {round_num} ({race.name}) has been cancelled.*",
                 parse_mode="Markdown",
             )
@@ -466,5 +514,6 @@ def setup_admin_handlers(app: Application) -> None:
     app.add_handler(CommandHandler("admin_setprices", admin_setprices))
     app.add_handler(CommandHandler("admin_simulate", admin_simulate))
     app.add_handler(CommandHandler("admin_export", admin_export))
+    app.add_handler(CommandHandler("admin_export_csv", admin_export_csv))
     app.add_handler(CommandHandler("admin_cancelrace", admin_cancelrace))
     app.add_handler(CommandHandler("admin_health", admin_health))

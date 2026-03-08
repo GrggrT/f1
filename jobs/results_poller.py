@@ -49,11 +49,14 @@ async def poll_fast_results(context: CallbackContext) -> None:
         if attempt >= MAX_POLL_ATTEMPTS:
             # Fallback: notify group that results are delayed
             logger.warning("Max poll attempts for round %d, falling back to Jolpica Monday", race_round)
-            if settings.GROUP_CHAT_ID:
-                await context.bot.send_message(
-                    chat_id=settings.GROUP_CHAT_ID,
-                    text="\u23f3 \u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u0437\u0430\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u044e\u0442\u0441\u044f. \u041f\u043e\u043b\u043d\u044b\u0435 \u043e\u0447\u043a\u0438 \u0431\u0443\u0434\u0443\u0442 \u0432 \u043f\u043e\u043d\u0435\u0434\u0435\u043b\u044c\u043d\u0438\u043a.",
-                )
+            for chat_id in settings.GROUP_CHAT_IDS:
+                try:
+                    await context.bot.send_message(
+                        chat_id=chat_id,
+                        text="\u23f3 \u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b \u0437\u0430\u0434\u0435\u0440\u0436\u0438\u0432\u0430\u044e\u0442\u0441\u044f. \u041f\u043e\u043b\u043d\u044b\u0435 \u043e\u0447\u043a\u0438 \u0431\u0443\u0434\u0443\u0442 \u0432 \u043f\u043e\u043d\u0435\u0434\u0435\u043b\u044c\u043d\u0438\u043a.",
+                    )
+                except Exception:
+                    logger.exception("Failed to send delay message to %s", chat_id)
             return
 
         logger.info("No OpenF1 results for round %d (attempt %d/%d)", race_round, attempt + 1, MAX_POLL_ATTEMPTS)
@@ -156,7 +159,7 @@ async def process_and_publish(context: CallbackContext, race_round: int, bundle:
     user_scores.sort(key=lambda x: x["fantasy_points"], reverse=True)
 
     # 7. Post to group
-    if settings.GROUP_CHAT_ID:
+    if settings.GROUP_CHAT_IDS:
         await _post_results_to_group(context, race_round, bundle, user_scores)
 
 
@@ -204,16 +207,19 @@ async def validate_results(context: CallbackContext) -> None:
         logger.warning("Discrepancies found for round %d, rescoring", race_round)
         await process_and_publish(context, race_round, bundle)
 
-        if settings.GROUP_CHAT_ID:
-            await context.bot.send_message(
-                chat_id=settings.GROUP_CHAT_ID,
-                text=(
-                    f"\u26a0\ufe0f *\u041e\u0411\u041d\u041e\u0412\u041b\u0415\u041d\u0418\u0415 Round {race_round}*\n\n"
-                    "\u0421\u0442\u044e\u0430\u0440\u0434\u044b \u043f\u0440\u0438\u043d\u044f\u043b\u0438 \u0440\u0435\u0448\u0435\u043d\u0438\u0435 \u2014 \u043e\u0447\u043a\u0438 \u043f\u0435\u0440\u0435\u0441\u0447\u0438\u0442\u0430\u043d\u044b.\n"
-                    "\U0001f4ca /standings \u0434\u043b\u044f \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u043e\u0439 \u0442\u0430\u0431\u043b\u0438\u0446\u044b"
-                ),
-                parse_mode="Markdown",
-            )
+        for chat_id in settings.GROUP_CHAT_IDS:
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=(
+                        f"\u26a0\ufe0f *\u041e\u0411\u041d\u041e\u0412\u041b\u0415\u041d\u0418\u0415 Round {race_round}*\n\n"
+                        "\u0421\u0442\u044e\u0430\u0440\u0434\u044b \u043f\u0440\u0438\u043d\u044f\u043b\u0438 \u0440\u0435\u0448\u0435\u043d\u0438\u0435 \u2014 \u043e\u0447\u043a\u0438 \u043f\u0435\u0440\u0435\u0441\u0447\u0438\u0442\u0430\u043d\u044b.\n"
+                        "\U0001f4ca /standings \u0434\u043b\u044f \u043e\u0431\u043d\u043e\u0432\u043b\u0451\u043d\u043d\u043e\u0439 \u0442\u0430\u0431\u043b\u0438\u0446\u044b"
+                    ),
+                    parse_mode="Markdown",
+                )
+            except Exception:
+                logger.exception("Failed to send rescore notification to %s", chat_id)
 
 
 # ── Group chat posting ──
@@ -225,8 +231,7 @@ async def _post_results_to_group(
     bundle: RaceResultsBundle,
     user_scores: list[dict],
 ) -> None:
-    """Post formatted results to group chat."""
-    chat_id = settings.GROUP_CHAT_ID
+    """Post formatted results to group chats."""
     db: Database = context.bot_data["db"]
     race = await db.get_race(race_round)
     race_name = race.name if race else f"Round {race_round}"
@@ -241,17 +246,6 @@ async def _post_results_to_group(
         race_lines.append(f"P{pos:<3} {name}{fl}")
     race_lines.append("```")
 
-    try:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="\n".join(race_lines),
-            parse_mode="Markdown",
-        )
-    except Exception:
-        logger.exception("Failed to post race results")
-
-    await asyncio.sleep(3)
-
     # Fantasy scores
     score_lines = [f"\U0001f4ca *Fantasy Scores \u2014 Round {race_round}*\n"]
     score_lines.append("```")
@@ -262,26 +256,38 @@ async def _post_results_to_group(
         score_lines.append(f"{i:>2} @{username:<13} {s['fantasy_points']:>6.0f}")
     score_lines.append("```")
 
-    try:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="\n".join(score_lines),
-            parse_mode="Markdown",
-        )
-    except Exception:
-        logger.exception("Failed to post fantasy scores")
-
-    await asyncio.sleep(3)
-
     # Updated season standings
     standings = await db.get_standings()
     standings_text = format_standings_table(standings)
 
-    try:
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text=standings_text,
-            parse_mode="Markdown",
-        )
-    except Exception:
-        logger.exception("Failed to post standings")
+    for chat_id in settings.GROUP_CHAT_IDS:
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="\n".join(race_lines),
+                parse_mode="Markdown",
+            )
+        except Exception:
+            logger.exception("Failed to post race results to %s", chat_id)
+
+        await asyncio.sleep(3)
+
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="\n".join(score_lines),
+                parse_mode="Markdown",
+            )
+        except Exception:
+            logger.exception("Failed to post fantasy scores to %s", chat_id)
+
+        await asyncio.sleep(3)
+
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=standings_text,
+                parse_mode="Markdown",
+            )
+        except Exception:
+            logger.exception("Failed to post standings to %s", chat_id)

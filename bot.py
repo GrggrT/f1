@@ -11,6 +11,7 @@ from data.f1_calendar import load_calendar
 from handlers.admin import setup_admin_handlers
 from handlers.chips import setup_chips_handlers
 from handlers.extras import setup_extras_handlers
+from handlers.h2h import setup_h2h_handlers
 from handlers.nextrace import setup_nextrace_handlers
 from handlers.predict import setup_predict_handlers
 from handlers.results import setup_results_handlers
@@ -45,6 +46,10 @@ async def post_init(app: Application) -> None:
         BotCommand("nextrace", "\u0421\u043b\u0435\u0434\u0443\u044e\u0449\u0430\u044f \u0433\u043e\u043d\u043a\u0430"),
         BotCommand("predict", "\u041f\u0440\u043e\u0433\u043d\u043e\u0437\u044b"),
         BotCommand("survivor", "Survivor Pool"),
+        BotCommand("survivor_standings", "\u0422\u0430\u0431\u043b\u0438\u0446\u0430 Survivor"),
+        BotCommand("rival", "H2H \u0434\u0443\u044d\u043b\u0438"),
+        BotCommand("h2h", "\u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430 H2H"),
+        BotCommand("driver", "\u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430 \u043f\u0438\u043b\u043e\u0442\u0430"),
         BotCommand("chips", "\u0427\u0438\u043f\u044b"),
         BotCommand("transfer", "\u0422\u0440\u0430\u043d\u0441\u0444\u0435\u0440"),
         BotCommand("results", "\u0420\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u044b"),
@@ -102,6 +107,7 @@ def main() -> None:
     setup_nextrace_handlers(app)
     setup_predict_handlers(app)
     setup_survivor_handlers(app)
+    setup_h2h_handlers(app)
     setup_extras_handlers(app)
     setup_admin_handlers(app)
 
