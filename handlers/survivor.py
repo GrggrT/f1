@@ -11,7 +11,6 @@ from telegram.ext import (
     ContextTypes,
 )
 
-from config import settings
 from data.database import Database
 from services.budget import get_driver_name
 from services.survivor_logic import SurvivorService
@@ -178,18 +177,6 @@ async def survivor_confirm_callback(update: Update, context: ContextTypes.DEFAUL
             f"\U0001f91e Удачи!"
         )
 
-    # Notify group
-    for chat_id in settings.GROUP_CHAT_IDS:
-        username = update.effective_user.username
-        display = f"@{username}" if username else update.effective_user.full_name
-        try:
-            await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"\U0001f3af {display} сделал survivor pick!",
-            )
-        except Exception as e:
-            logger.warning("Could not send group survivor notification to %s: %s", chat_id, e)
-
 
 async def survivor_standings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show survivor standings."""
@@ -221,7 +208,7 @@ async def survivor_standings_command(update: Update, context: ContextTypes.DEFAU
 
 
 def setup_survivor_handlers(app: Application) -> None:
-    app.add_handler(CommandHandler("survivor", survivor_group))
+    app.add_handler(CommandHandler("survivor", survivor_dm))
     app.add_handler(CommandHandler("survivor_standings", survivor_standings_command))
     app.add_handler(CallbackQueryHandler(survivor_confirm_callback, pattern=r"^sv(c_|_cancel)"))
     app.add_handler(CallbackQueryHandler(survivor_callback, pattern=r"^sv_"))

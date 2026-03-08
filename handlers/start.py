@@ -1,7 +1,7 @@
 import logging
 
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, ApplicationHandlerStop, CommandHandler, ContextTypes, MessageHandler, filters
 
 from data.database import Database
 
@@ -89,15 +89,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             from handlers.extras import chart_command
             await chart_command(update, context)
             return
-
-    if update.effective_chat.type != "private":
-        await update.message.reply_text(
-            "\U0001f3ce *F1 Fantasy Bot*\n\n"
-            "\u0412\u0441\u0435 \u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u0438 \u0433\u0440\u0443\u043f\u043f\u044b \u043c\u043e\u0433\u0443\u0442 \u043f\u0440\u0438\u0441\u043e\u0435\u0434\u0438\u043d\u0438\u0442\u044c\u0441\u044f \u043a \u043b\u0438\u0433\u0435.\n"
-            "\u0418\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0439 /join \u0434\u043b\u044f \u0440\u0435\u0433\u0438\u0441\u0442\u0440\u0430\u0446\u0438\u0438, /help \u0434\u043b\u044f \u0441\u043f\u0438\u0441\u043a\u0430 \u043a\u043e\u043c\u0430\u043d\u0434.",
-            parse_mode="Markdown",
-        )
-        return
+        elif arg == "menu":
+            pass  # Fall through to show dashboard
 
     # DM — register + show dashboard with menu
     user = await db.get_user(update.effective_user.id)
@@ -546,7 +539,29 @@ ROUTER_MENU_TEXTS = [
 ]
 
 
+async def _group_redirect(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Redirect ALL commands in group chat to DM."""
+    bot_username = (await context.bot.get_me()).username
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "🏎 Открыть бот",
+            url=f"https://t.me/{bot_username}?start=menu",
+        )]
+    ])
+    await update.message.reply_text(
+        "👉 Бот работает в личных сообщениях.",
+        reply_markup=keyboard,
+    )
+    raise ApplicationHandlerStop
+
+
 def setup_start_handlers(app: Application) -> None:
+    # Block ALL commands in groups — redirect to DM (highest priority group -1)
+    app.add_handler(MessageHandler(
+        filters.COMMAND & ~filters.ChatType.PRIVATE,
+        _group_redirect,
+    ), group=-1)
+
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("join", join_command))

@@ -788,7 +788,6 @@ def setup_team_handlers(app: Application) -> None:
         allow_reentry=True,
     )
     app.add_handler(conv_handler, group=1)
-    app.add_handler(CommandHandler("pickteam", pickteam_group), group=0)
     app.add_handler(CommandHandler("myteam", myteam_command))
 
     transfer_conv = ConversationHandler(

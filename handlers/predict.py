@@ -336,4 +336,3 @@ def setup_predict_handlers(app: Application) -> None:
         allow_reentry=True,
     )
     app.add_handler(conv_handler, group=2)
-    app.add_handler(CommandHandler("predict", predict_group), group=0)
